@@ -1,5 +1,3 @@
-GEOFF SAYS:
-I made some nonsense changes to test out committing.
 
 Copyright (c) 2016 Theodore Gast, Chuyuan Fu, Chenfanfu Jiang, Joseph Teran
 
