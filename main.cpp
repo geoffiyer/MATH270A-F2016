@@ -4,13 +4,16 @@
 
 int main() {
     using std::cout;
+    
+    bool verbose_flag = true;
+    Eigen::Matrix<double, 3, 3>A, R, S;
+    A << 1,1,1,2,2,2,3,4,5;
 
-    Eigen::Matrix<double, 3, 3>A;
+    // srand((unsigned int) time(0));
+    // A = Eigen::Matrix<double,3,3>::Random();
 
-    A << 1,2,3,4,5,6,7,8,9;
-
-    cout << "Does this compile?\n";
-    cout << A << "\n\n";
-    cout << "Symmetric error in A is " << symError(A) << "\n";
+    polarDecomposition(A,R,S,verbose_flag);
+    //cout << symError(A) << "\n";
+    
     return 0;
 }
