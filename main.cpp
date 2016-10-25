@@ -42,104 +42,25 @@ double det(const Matrix& A);
 void swapCols(Matrix& A);
 void negateCol2(Matrix& A);
 
+// Inputs: Matrix F to compute the svd
+//   Calculates svd via algorithm 2 discussed in class
+// Outputs (by reference): Matrices U,V. Vector of singular values Sigma.
+// I should probably make this templated on double or float?
+void svd(const Matrix& F, Matrix& U, Vector& Sigma, Matrix& V, bool verbose_flag);
+
 int main() {
-    using std::cout;
-    using std::sqrt;
-    using std::abs;
     bool verbose_flag = true;
     
     // Input: 2x2 matrix F
     //    For now just use a random matriix.
     srand((unsigned int) time(0));
     Matrix F = Matrix::Random();
-    
-    // Steps to do:
-    // 1) C  = F^T F
-    Matrix C;
-    C.noalias() = F.transpose() * F;
+    Matrix U,V;
+    Vector Sigma;
 
-    // 2) Apply eigensolver to C to get V, \sigma_1 and \sigma_2
-    //       Use eigen self-adjoint solver
-    Eigen::SelfAdjointEigenSolver<Matrix> esolve;
-    esolve.compute(C);
-    Matrix V = esolve.eigenvectors();
-    
-    // 3) Set A = FV  (so A = U*Sigma)
-    Matrix A;
-    A.noalias() = F*V;
-    
-    // 4) Use givens rotation on A. The cos and sin should give U
-    //            U = [ c  s
-    //                 -s  c ]
-    //         ImplicitQRSVD.h   should have givens code
-    //    Here c is givens.c and s is givens.s
-    JIXIE::GivensRotation<T> givens(A(0,0),A(1,0),0,1);
-    Matrix U;
-    U << givens.c, givens.s, -givens.s, givens.c;
-    
-    // 5) Use that U.transpose()*A = Sigma to get the eigenvalues of F
-    T sigma_1 = A(0,0)*givens.c - A(1,0)*givens.s;
-    T sigma_2 = A(0,1)*givens.s + A(1,1)*givens.c;
+    svd(F,U,Sigma,V,verbose_flag);
 
-    // GET RID OF THIS FOR FINAL VERSION
-    T save1 = sigma_1;
-    T save2 = sigma_2;
-
-    // 6) Pass through U, V, Sigma to fix sign conventions.
-    // in other words, this is the cleanup step
-
-    if(abs(sigma_1)<abs(sigma_2)) {
-        T temp = sigma_1;
-        sigma_1 = sigma_2;
-        sigma_2 = temp;
-        swapCols(U);
-        swapCols(V);
-        if(verbose_flag)
-            cout << "Swapped sigma_1 and sigma_2\n";
-    }
-
-    if(sigma_1 < 0) {
-        sigma_1 *= -1;
-        U(0,0) *= -1;
-        U(0,1) *= -1;
-        if(verbose_flag)
-            cout << "Negated sigma_1\n";
-    }
-    
-    if(det(F) > 0 && sigma_2 < 0) {
-        sigma_2 *= -1;
-        U(1,0) *= -1;
-        U(1,1) *= -1;
-        if(verbose_flag)
-            cout << "Negated sigma_2\n";
-    }
-    else if (det(F) < 0 && sigma_2 > 0){
-        sigma_2 *= -1;
-        U(1,0) *= -1;
-        U(1,1) *= -1;
-        if(verbose_flag)
-            cout << "Negated sigma_2\n";
-    }
-
-    if(det(U)<0) {
-        U.col(1) *= -1;
-        V.col(1) *= -1;
-        if(verbose_flag)
-            cout << "Fixed det of U and V\n";
-    }
-
-    Matrix Sigma;
-    Sigma << sigma_1, 0, 0, sigma_2;
-
-    if(verbose_flag) {
-        cout << "Original Matrix F:\n" << F << "\n\n"
-             << "Comparing evals: Eigensolver gives us eigenvalues of F^T*F\n" << esolve.eigenvalues().transpose()
-             << "\nBefore any swaps evals are\n" << save1 << " " << save2
-             << "\nMy arithmetic gives us singular values of F\n" << sigma_1 << " " << sigma_2 << "\n\n"
-             << "U and V are (respectively)\n" << U << "\n\n" << V << "\n\n"
-             << "Compute U*Sigma*V^T to get\n" << U*Sigma*V.transpose() << "\n\n";                    
-    }
-
+    return 0;
 }
 
 double det(const Matrix& A) {
@@ -152,4 +73,91 @@ void swapCols(Matrix& A) {
         A(i,0) = A(i,1);
         A(i,1) = temp;
     }
+}
+
+// Inputs: Matrix F to compute the svd
+//   Calculates svd via algorithm 2 discussed in class
+// Outputs (by reference): Matrices U,V. Vector of singular values Sigma.
+// I should probably make this templated on double or float?
+void svd(const Matrix& F, Matrix& U, Vector& Sigma, Matrix& V, bool verbose_flag) {
+
+    using std::cout;
+    using std::sqrt;
+    using std::abs;
+
+    // C  = F^T F
+    Matrix C;
+    C.noalias() = F.transpose() * F;
+
+    // Apply eigensolver to C to get V, \sigma_1 and \sigma_2
+    //       Use eigen self-adjoint solver
+    Eigen::SelfAdjointEigenSolver<Matrix> esolve;
+    esolve.compute(C);
+    V = esolve.eigenvectors();
+    V *= 1/det(V);  // TODO: This line is scary
+    
+    // Set A = FV  (so A = U*Sigma)
+    Matrix A;
+    A.noalias() = F*V;
+    
+    // Use givens rotation on A. The cos and sin should give U
+    //            U = [ c  s
+    //                 -s  c ]
+    //         ImplicitQRSVD.h   should have givens code
+    //    Here c is givens.c and s is givens.s
+    JIXIE::GivensRotation<T> givens(A(0,0),A(1,0),0,1);
+    U << givens.c, givens.s, -givens.s, givens.c;
+    
+    // Use that U.transpose()*A = Sigma to get the eigenvalues of F
+    T sigma_1 = A(0,0)*givens.c - A(1,0)*givens.s;
+    T sigma_2 = A(0,1)*givens.s + A(1,1)*givens.c;
+    
+    // Pass through U, V, Sigma to fix sign conventions.
+    // in other words, this is the cleanup step
+    if(abs(sigma_1)<abs(sigma_2)) {
+        T temp = sigma_1;
+        sigma_1 = sigma_2;
+        sigma_2 = temp;
+        swapCols(U);
+        swapCols(V);
+        if(verbose_flag)
+            cout << "Swapped sigma_1 and sigma_2\n";
+    }
+
+    if(sigma_1 < 0) {
+        sigma_1 *= -1;
+        U.col(0) *= -1;
+        if(verbose_flag)
+            cout << "Negated sigma_1\n";
+    }
+    
+    if(det(F) > 0 && sigma_2 < 0) {
+        sigma_2 *= -1;
+        U.col(1) *= -1;
+        if(verbose_flag)
+            cout << "Negated sigma_2\n";
+    }
+    else if (det(F) < 0 && sigma_2 > 0){
+        sigma_2 *= -1;
+        U.col(1) *= -1;
+        if(verbose_flag)
+            cout << "Negated sigma_2\n";
+    }
+
+    if(det(U)<0) {
+        U.col(0) *= -1;
+        V.col(0) *= -1;
+        if(verbose_flag)
+            cout << "Fixed det of U and V\n";
+    }
+
+    // Vector of singular values
+    Sigma << sigma_1, sigma_2;
+
+    if(verbose_flag) {
+        cout << "\nMy arithmetic gives us singular values of F\n" << Sigma.transpose()
+             << "\nU and V are (respectively)\n" << U << "\n\n" << V
+             << "\n\nError in \\ell^2 norm: " << (U*Sigma.asDiagonal()*V.transpose()-F).norm() << "\n\n";
+    }
+    
 }
