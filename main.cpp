@@ -34,13 +34,13 @@
 #include "ImplicitQRSVD.h"
 
 // Some shortening of names of stuff here
-typedef double T;                         // Matrix type can be double or float
-const unsigned n = 2;
-typedef Eigen::Matrix<T, n, n> Matrix;    // Shorten the name of matrix class
-typedef Eigen::Matrix<T, n, 1> Vector;
+typedef double T;          
+typedef Eigen::Matrix<T, 2, 2> Matrix;    // Shorten the name of matrix class
+typedef Eigen::Matrix<T, 2, 1> Vector;
 
 double det(const Matrix& A);
-double swapCols(Matrix& A);
+void swapCols(Matrix& A);
+void negateCol2(Matrix& A);
 
 int main() {
     using std::cout;
@@ -50,8 +50,8 @@ int main() {
     
     // Input: 2x2 matrix F
     //    For now just use a random matriix.
+    srand((unsigned int) time(0));
     Matrix F = Matrix::Random();
-    F << -1,0,0,-1;
     
     // Steps to do:
     // 1) C  = F^T F
@@ -81,49 +81,60 @@ int main() {
     T sigma_1 = A(0,0)*givens.c - A(1,0)*givens.s;
     T sigma_2 = A(0,1)*givens.s + A(1,1)*givens.c;
 
+    // GET RID OF THIS FOR FINAL VERSION
+    T save1 = sigma_1;
+    T save2 = sigma_2;
+
     // 6) Pass through U, V, Sigma to fix sign conventions.
     // in other words, this is the cleanup step
 
-    // This is currently not correct.
-    // I haven't even looked at det(A) yet.
-    // Plan: Fix det(U) and det(V) first.
-    //   then check det(A) and use that to figure out the sigmaif(
+    if(abs(sigma_1)<abs(sigma_2)) {
+        T temp = sigma_1;
+        sigma_1 = sigma_2;
+        sigma_2 = temp;
+        swapCols(U);
+        swapCols(V);
+        if(verbose_flag)
+            cout << "Swapped sigma_1 and sigma_2\n";
+    }
 
-    if(det(U) < 0) {
-        swapCols(U)
-    
-    if(sigma_1 < 0 && sigma_2 < 0) {
+    if(sigma_1 < 0) {
         sigma_1 *= -1;
-        sigma_2 *= -1;
-        U *= -1;
+        U(0,0) *= -1;
+        U(0,1) *= -1;
         if(verbose_flag)
-            cout << "Two negative singular values. Had to swap.\n";
+            cout << "Negated sigma_1\n";
     }
     
-    if(sigma_1 <= abs(sigma_2)) {
-        // sigma_1 and sigma_2
-        T temp = sigma_2;
-        sigma_2 = sigma_1;
-        sigma_1 = temp;
-            
-        // switch columns of U
-        swapCols(U);    
-        
-        // switch columns of V (same as rows of V^T)
-        for(int i=0; i<2; i++) {
-            temp = V(i,0);
-            V(i,0) = V(i,1);
-            V(i,1) = temp;
-        }
+    if(det(F) > 0 && sigma_2 < 0) {
+        sigma_2 *= -1;
+        U(1,0) *= -1;
+        U(1,1) *= -1;
         if(verbose_flag)
-            cout << "Singular values in incorrect order. Swapped\n";
+            cout << "Negated sigma_2\n";
     }
+    else if (det(F) < 0 && sigma_2 > 0){
+        sigma_2 *= -1;
+        U(1,0) *= -1;
+        U(1,1) *= -1;
+        if(verbose_flag)
+            cout << "Negated sigma_2\n";
+    }
+
+    if(det(U)<0) {
+        U.col(1) *= -1;
+        V.col(1) *= -1;
+        if(verbose_flag)
+            cout << "Fixed det of U and V\n";
+    }
+
+    Matrix Sigma;
     Sigma << sigma_1, 0, 0, sigma_2;
 
     if(verbose_flag) {
         cout << "Original Matrix F:\n" << F << "\n\n"
-             << "C = F^T * F:\n" << C << "\n\n"
              << "Comparing evals: Eigensolver gives us eigenvalues of F^T*F\n" << esolve.eigenvalues().transpose()
+             << "\nBefore any swaps evals are\n" << save1 << " " << save2
              << "\nMy arithmetic gives us singular values of F\n" << sigma_1 << " " << sigma_2 << "\n\n"
              << "U and V are (respectively)\n" << U << "\n\n" << V << "\n\n"
              << "Compute U*Sigma*V^T to get\n" << U*Sigma*V.transpose() << "\n\n";                    
@@ -136,8 +147,8 @@ double det(const Matrix& A) {
 }
 
 void swapCols(Matrix& A) {
-    for(int i=0; i<n; i++) {
-        temp = A(i,0);
+    for(int i=0; i<2; i++) {
+        T temp = A(i,0);
         A(i,0) = A(i,1);
         A(i,1) = temp;
     }
