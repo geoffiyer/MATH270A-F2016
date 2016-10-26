@@ -40,7 +40,6 @@ typedef Eigen::Matrix<T, 2, 1> Vector;
 
 double det(const Matrix& A);
 void swapCols(Matrix& A);
-void negateCol2(Matrix& A);
 
 // Inputs: Matrix F to compute the svd
 //   Calculates svd via algorithm 2 discussed in class
