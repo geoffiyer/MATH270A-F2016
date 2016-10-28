@@ -437,17 +437,71 @@ void My_SVD(const Eigen::Matrix2f& F,Eigen::Matrix2f& U,Eigen::Matrix2f& sigma,E
     using std::cout;
     using std::sqrt;
     using std::abs;
+    const float tol = 32 * std::numeric_limits<float>::epsilon();
 
     // C  = F^T F
     Eigen::Matrix2f C;
     C.noalias() = F.transpose() * F;
+
+    // First check if C is rank-deficient
+    if(abs(det(C)) < tol) {
+        // Check if C is zero
+        if(C.norm() < tol) {
+            U = Eigen::Matrix2f::Identity();
+            V = Eigen::Matrix2f::Identity();
+            sigma = Eigen::Matrix2f::Zero();
+            return;
+        }
+
+        // Suppose our matrix is written as 
+        // [ a  b
+        //   b  d ]
+        // At this point we know eigenvalues are 0 and a+d
+        // Need to do slightly different work to get eigenvectors
+        // depending on which of a, b, d are zero.
+        // It's possible for one of a,d to be zero, but not both.
+        // If any of a,d are zero, then b = 0
+        float sigma_1 = sqrt(C(0,0) + C(1,1));
+        float sigma_2 = 0;
+        
+        // If a is nonzero
+        if(abs(C(0,0)) > tol) {
+            // in this case (a, b)^T is an eigenvector
+            float denom = sqrt( C(0,0)*C(0,0) + C(1,0)*C(1,0));
+            V(0,0) = C(0,0)/denom;
+            V(1,0) = C(1,0)/denom;
+            // the second eigenvector is anything orthogonal to the first
+            V(0,1) = -C(1,0)/denom;
+            V(1,1) = C(0,0)/denom;
+        }
+        else {
+            // in this case, (b,d)^T is an eigenvector
+            float denom = sqrt( C(1,0)*C(1,0) + C(1,1)*C(1,1));
+            V(0,0) = C(1,0)/denom;
+            V(1,0) = C(1,1)/denom;
+            // the second eigenvector is anything orthogonal to the first
+            V(0,1) = -C(1,1)/denom;
+            V(1,1) = C(1,0)/denom;
+        }
+        
+        Eigen::Matrix2f A;
+        A.noalias() = F*V; // So A = U*sigma. But sigma has only one nonzero entry.
+                           // So really A = [ sigma_1 * u_11   0
+                           //                 sigma_1 * u_21   0 ]
+        U.col(0) = A.col(0)/sigma_1;
+        U(0,1) = -U(1,0);
+        U(1,1) = U(0,0);
+        
+        // Now we have A = U*Sigma*V^T. But still need that sigma_1 > abs(sigma_2).
+        sigma << sigma_1, 0, 0, sigma_2;
+        return;
+    }
 
     // Apply eigensolver to C to get V, \sigma_1 and \sigma_2
     //       Use eigen self-adjoint solver
     Eigen::SelfAdjointEigenSolver<Eigen::Matrix2f> esolve;
     esolve.compute(C);
     V = esolve.eigenvectors();
-    V *= 1/det(V);  // TODO: This line is scary
     
     // Set A = FV  (so A = U*Sigma)
     Eigen::Matrix2f A;
@@ -516,7 +570,7 @@ void My_Polar(const Eigen::Matrix3f& F,Eigen::Matrix3f& R,Eigen::Matrix3f& S){
 
     // Stop-loop conditions
     const long max_it = 100000;
-    const float tol = 256 * std::numeric_limits<float>::epsilon();
+    const float tol = 64 * std::numeric_limits<float>::epsilon();
     
     // Set up iteration. R = I,  S = F, it = 0
     typedef Eigen::Matrix<float, 3, 3> Matrix3;
@@ -549,8 +603,63 @@ void My_Polar(const Eigen::Matrix3f& F,Eigen::Matrix3f& R,Eigen::Matrix3f& S){
 //
 // }
 
+void my_benchmark_SVD();
+void my_benchmark_Polar();
+
 int main()
 {
-  bool run_benchmark = true;
+  bool run_benchmark = false;
   if (run_benchmark) runBenchmark();
+  
+  bool run_my_benchmark_SVD = false;
+  bool run_my_benchmark_Polar = false;
+  if (run_my_benchmark_SVD) my_benchmark_SVD();
+  if (run_my_benchmark_Polar) my_benchmark_Polar();
+  
+  return 0;
+}
+
+void my_benchmark_SVD() {
+    
+  // Input: 2x2 matrix F
+  //    For now just use a random matriix.
+  srand((unsigned int) time(0));
+  Eigen::Matrix2f F;
+  int a = rand()%5-2;
+  int b = rand()%5-2;
+  int c = rand()%5-2;
+  int d = rand()%5-2;
+  F << a,b,c,d;
+  Eigen::Matrix2f U,V,Sigma;
+  
+  My_SVD(F,U,Sigma,V);
+  
+  std::cout << "F =\n" << F
+            << "\n\nSigma =\n" << Sigma
+            << "\n\nU and V are (respectively)\n" << U << "\n\n" << V
+            << "\n\nU*Sigma*V^T =\n" << U*Sigma*V.transpose()
+            << "\n\ndet(U) = " << det(U) << ", det(V) = " << det(V)
+            <<"\nsigma_1 >= abs(sigma_2) true or false: " << (Sigma(0,0) >= std::abs(Sigma(1,1)))
+            << "\nError in \\ell^2 norm: " << (U*Sigma*V.transpose()-F).norm() << "\n\n";
+
+}
+
+void my_benchmark_Polar() {
+    
+  // Input: 3x3 matrix F
+  //    For now just use a random matriix.
+  srand((unsigned int) time(0));
+  Eigen::Matrix3f F = Eigen::Matrix3f::Random();
+  Eigen::Matrix3f R,S;
+  
+  My_Polar(F,R,S);
+  
+  std::cout << "Original Matrix F:\n" << F
+            << "\n\nRotation R:\n" << R
+            << "\n\nSymmetric S:\n" << S
+            << "\nSymmetric Error in S: " << symError(S)
+            << "\n\\ell^2 error of F-RS: " << (F-R*S).norm()
+            << "\nnorm of R^T*R - I = " << (R*R.transpose()-Eigen::Matrix3f::Identity()).norm()
+            << "\ndet(R) = " << R.determinant() << "\n";
+
 }
